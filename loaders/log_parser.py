@@ -56,20 +56,19 @@ def insert_sets(rows, filepath=None):
     for row in rows:
         exercise_name = row["exercise"]
         if exercise_name not in exercise_map:
-            print(f"  ⚠ Unknown exercise '{exercise_name}' — skipping. "
-                  f"Add it to the exercises table first.")
+            print(f"  ⚠ Unknown exercise '{exercise_name}' — skipping.")
             continue
 
         weight_kg = round(row["weight_lbs"] / 2.205, 2)
 
         db_rows.append((
-            row["date"],                    # logged_at
-            exercise_map[exercise_name],    # exercise_id
-            row["set_number"],              # set_number
-            row["reps"],                    # reps
-            weight_kg,                      # weight_kg (converted from lbs)
-            row["rpe"],                     # rpe
-            row["notes"]                    # notes
+            row["date"],
+            exercise_map[exercise_name],
+            row["set_number"],
+            row["reps"],
+            weight_kg,
+            row["rpe"],
+            row["notes"]
         ))
 
     if not db_rows:
@@ -78,17 +77,21 @@ def insert_sets(rows, filepath=None):
         conn.close()
         return
 
-    cur.executemany("""
-        INSERT INTO workout_sets
-            (logged_at, exercise_id, set_number, reps, weight_kg, rpe, notes)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
-    """, db_rows)
-
-    conn.commit()
-    print(f"✓ Inserted {len(db_rows)} sets from {filepath or 'input'}")
-
-    cur.close()
-    conn.close()
+    try:
+        cur.executemany("""
+            INSERT INTO workout_sets
+                (logged_at, exercise_id, set_number, reps, weight_kg, rpe, notes)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, db_rows)
+        conn.commit()
+        print(f"✓ Inserted {len(db_rows)} sets from {filepath or 'input'}")
+    except Exception as e:
+        conn.rollback()
+        print(f"✗ INSERT FAILED: {e}")
+        print(f"  First row attempted: {db_rows[0] if db_rows else 'none'}")
+    finally:
+        cur.close()
+        conn.close()
 
 # --- Run directly to test ---
 if __name__ == "__main__":

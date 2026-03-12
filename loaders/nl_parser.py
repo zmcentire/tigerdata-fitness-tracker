@@ -1,6 +1,6 @@
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 import anthropic
 from loaders.log_parser import insert_sets, get_connection
@@ -35,7 +35,7 @@ def parse_natural_language(text: str, date: str = None) -> list:
     - "Hit a heavy single on deadlift — 255lbs at RPE 9.5"
     - "Squatted 225x3x3, last set RPE 8.5"
     """
-    today = date or datetime.now().strftime("%Y-%m-%d")
+    today = date or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
     message = client.messages.create(
         model="claude-sonnet-4-20250514",
