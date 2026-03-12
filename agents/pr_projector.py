@@ -202,6 +202,92 @@ def print_projection_report(results: dict):
 
     print("\n" + "="*60 + "\n")
 
+def get_next_session(exercise_name: str) -> dict:
+    """
+    Looks at the last session's sets for a lift and applies
+    double progression rules to recommend next session weights/reps.
+
+    Rules:
+    - RPE <= 7.5: increase weight by 5 lbs (aggressive jump)
+    - RPE 7.5–8.5: increase weight by 2.5 lbs (standard progression)
+    - RPE 8.5–9.5: keep weight, add 1 rep to each set
+    - RPE > 9.5: keep weight and reps (consolidation week)
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            ws.set_number,
+            ws.reps,
+            ws.weight_kg,
+            ROUND(ws.weight_kg * 2.205, 1)          AS weight_lbs,
+            ws.rpe,
+            ws.logged_at::date                       AS session_date,
+            ROUND(ws.weight_kg * (1 + ws.reps / 30.0) * 2.205, 1) AS e1rm_lbs
+        FROM workout_sets ws
+        JOIN exercises e ON e.id = ws.exercise_id
+        WHERE e.name = %s
+        ORDER BY ws.logged_at DESC
+        LIMIT 5;
+    """, (exercise_name,))
+
+    last_sets = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    if not last_sets:
+        return {"exercise": exercise_name, "error": "No previous sessions found"}
+
+    avg_rpe = sum(s[4] for s in last_sets if s[4]) / len([s for s in last_sets if s[4]])
+    last_weight_lbs = float(last_sets[0][3])
+    last_weight_kg  = float(last_sets[0][2])
+    last_reps       = last_sets[0][1]
+    session_date    = last_sets[0][5]
+
+    if avg_rpe <= 7.5:
+        next_weight_lbs = round(last_weight_lbs + 5.0, 1)
+        next_reps       = last_reps
+        reason          = f"RPE {avg_rpe:.1f} <= 7.5 → aggressive +5 lbs"
+    elif avg_rpe <= 8.5:
+        next_weight_lbs = round(last_weight_lbs + 2.5, 1)
+        next_reps       = last_reps
+        reason          = f"RPE {avg_rpe:.1f} 7.5-8.5 → standard +2.5 lbs"
+    elif avg_rpe <= 9.5:
+        next_weight_lbs = last_weight_lbs
+        next_reps       = last_reps + 1
+        reason          = f"RPE {avg_rpe:.1f} 8.5-9.5 → same weight, +1 rep"
+    else:
+        next_weight_lbs = last_weight_lbs
+        next_reps       = last_reps
+        reason          = f"RPE {avg_rpe:.1f} > 9.5 → consolidation, hold position"
+
+    next_weight_kg = round(next_weight_lbs / 2.205, 2)
+
+    warmup_sets = [
+        {"set": 1, "weight_lbs": round(next_weight_lbs * 0.5),  "reps": 5,  "note": "warmup"},
+        {"set": 2, "weight_lbs": round(next_weight_lbs * 0.7),  "reps": 3,  "note": "warmup"},
+        {"set": 3, "weight_lbs": round(next_weight_lbs * 0.85), "reps": 2,  "note": "warmup"},
+    ]
+    working_sets = [
+        {"set": i, "weight_lbs": next_weight_lbs, "reps": next_reps, "note": "working"}
+        for i in range(4, 7)
+    ]
+
+    return {
+        "exercise":           exercise_name,
+        "last_session":       str(session_date),
+        "last_weight_lbs":    last_weight_lbs,
+        "last_reps":          last_reps,
+        "avg_rpe":            round(avg_rpe, 1),
+        "next_weight_lbs":    next_weight_lbs,
+        "next_weight_kg":     next_weight_kg,
+        "next_reps":          next_reps,
+        "progression_reason": reason,
+        "warmup_sets":        warmup_sets,
+        "working_sets":       working_sets
+    }
+
 # --- Run directly to test ---
 if __name__ == "__main__":
     print("Pulling 1RM trend from weekly_1rm continuous aggregate...")
