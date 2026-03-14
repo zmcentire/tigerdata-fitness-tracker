@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import requests
 import plotly.graph_objects as go
@@ -13,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-API_BASE = "http://localhost:8000"
+API_BASE = os.getenv("API_BASE", "http://localhost:8000")
 LIFTS    = ["Bench Press", "Squat", "Deadlift"]
 TARGETS  = {"Bench Press": 225, "Squat": 315, "Deadlift": 285}
 COLORS   = {"Bench Press": "#FF6B6B", "Squat": "#4ECDC4", "Deadlift": "#45B7D1"}

@@ -1,0 +1,24 @@
+# Dockerfile.api
+# Builds the FastAPI backend container.
+# Exposes port 8000 and runs uvicorn without --reload in production.
+
+FROM python:3.11-slim
+
+# Set working directory inside the container
+WORKDIR /app
+
+# Install dependencies first (before copying code).
+# Docker caches this layer — if requirements.txt hasn't changed,
+# pip install is skipped on rebuild. This makes rebuilds fast.
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy all project code into the container
+COPY . .
+
+# Expose the port uvicorn will listen on
+EXPOSE 8000
+
+# Run uvicorn without --reload in production (reload is dev-only)
+# host 0.0.0.0 makes the server accessible from outside the container
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

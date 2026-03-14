@@ -1,0 +1,63 @@
+# docker-compose.yml
+#
+# Defines two services:
+#   api       — FastAPI on port 8000
+#   dashboard — Streamlit on port 8501
+#
+# Both share a private network (fitness-net) so they can communicate
+# using service names as hostnames (e.g. http://api:8000).
+#
+# The .env file is passed to the api service only — the dashboard
+# has no direct database access, it only talks to the API.
+
+version: "3.9"
+
+services:
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: fitness-api
+    ports:
+      - "8000:8000"       # host:container — access at localhost:8000
+    env_file:
+      - .env              # DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, ANTHROPIC_API_KEY
+    networks:
+      - fitness-net
+    restart: unless-stopped
+    healthcheck:
+      # Docker will poll /health every 30s to verify the API is alive
+      # The dashboard's depends_on condition waits for this to pass
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s   # Give uvicorn time to start before first check
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: fitness-dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      # Inside Docker, Streamlit can't use localhost:8000 to reach FastAPI
+      # because localhost inside the dashboard container refers to itself.
+      # Docker's internal DNS resolves service names, so we use http://api:8000.
+      - API_BASE=http://api:8000
+    networks:
+      - fitness-net
+    depends_on:
+      api:
+        condition: service_healthy   # Wait for API healthcheck to pass
+    restart: unless-stopped
+
+networks:
+  fitness-net:
+    driver: bridge
+    # A private bridge network. Both containers join it and can reach
+    # each other by service name. Nothing outside can access this network
+    # directly — only the mapped ports (8000, 8501) are exposed to the host.

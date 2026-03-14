@@ -1,0 +1,21 @@
+# Dockerfile.dashboard
+# Builds the Streamlit dashboard container.
+# Exposes port 8501 and connects to the FastAPI container via Docker network.
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Same dependency-first caching strategy
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8501
+
+# --server.address=0.0.0.0 makes Streamlit accessible outside the container
+# --server.port=8501 is the standard Streamlit port
+# --server.enableCORS=false and --server.enableXsrfProtection=false
+#   are required when running behind a reverse proxy or in Docker
+CMD ["streamlit", "run", "dashboard.py", "--server.address=0.0.0.0", "--server.port=8501", "--server.enableCORS=false", "--server.enableXsrfProtection=false"]
